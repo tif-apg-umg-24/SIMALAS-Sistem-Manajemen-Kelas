@@ -478,7 +478,10 @@
     <div class="card">
       <div class="card-header">
         <h2 class="card-title">Kas Kelas</h2>
-        <div><button class="btn btn-success btn-sm" onclick="exportKas()"><i class="fas fa-download"></i> Export</button></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-success btn-sm" onclick="exportKas()"><i class="fas fa-download"></i> Export</button>
+          <button id="btnAddKas" class="btn btn-primary btn-sm" style="display:none" onclick="openModal('modalAddKas')"><i class="fas fa-plus"></i> Tambah Nama Kas</button>
+        </div>
       </div>
       <div class="kas-list" id="kasList"></div>
     </div>
@@ -514,6 +517,14 @@
     <div class="form-group"><label class="form-label">Password Baru</label><input type="password" id="newPass" class="form-control" required></div>
     <div class="form-group"><label class="form-label">Konfirmasi Password</label><input type="password" id="confPass" class="form-control" required></div>
     <button type="submit" class="btn btn-primary" style="width:100%">Simpan</button>
+  </form>
+</div></div>
+
+<div id="modalAddKas" class="modal"><div class="modal-content">
+  <div class="modal-header"><h3 class="modal-title">Tambah Nama Kas</h3><button class="close-modal" onclick="closeModal('modalAddKas')"><i class="fas fa-times"></i></button></div>
+  <form id="formAddKas" onsubmit="handleAddKas(event)">
+    <div class="form-group"><label class="form-label">Nama</label><input class="form-control" name="name" required></div>
+    <div style="display:flex;gap:8px"><button type="submit" class="btn btn-primary" style="flex:1">Tambah</button><button type="button" class="btn btn-light" style="flex:1" onclick="closeModal('modalAddKas')">Batal</button></div>
   </form>
 </div></div>
 
@@ -586,7 +597,7 @@ function getTasks(){ return JSON.parse(localStorage.getItem('simalas_tasks')||'[
 function saveTasks(t){ localStorage.setItem('simalas_tasks', JSON.stringify(t)) }
 function getTaskStatus(){ return JSON.parse(localStorage.getItem('simalas_task_status')||'{}') }
 function saveTaskStatus(s){ localStorage.setItem('simalas_task_status', JSON.stringify(s)) }
-
+function getKas(){ return JSON.parse(localStorage.getItem('simalas_kas')||'[]') }
 function saveKas(k){ localStorage.setItem('simalas_kas', JSON.stringify(k)) }
 
 /* ---------- UI elements ---------- */
@@ -640,6 +651,7 @@ function onLogin(){
   document.getElementById('btnTopUpload').style.display = isAdmin ? 'inline-block' : 'none';
   document.getElementById('btnUploadPage').style.display = isAdmin ? 'inline-block' : 'none';
   document.getElementById('btnAddTugas').style.display = isAdmin ? 'inline-block' : 'none';
+  document.getElementById('btnAddKas').style.display = isAdmin ? 'inline-block' : 'none';
 
   renderMaterials(); renderTasks(); renderKas(); renderStats();
 }
@@ -666,8 +678,8 @@ function renderMaterials(){
       <div class="material-icon ${m.type}"><i class="fas fa-file-${m.type==='pdf'?'pdf':m.type==='doc'?'word':'powerpoint'}"></i></div>
       <div class="material-info"><div class="material-title">${escapeHtml(m.title)}</div><div class="material-meta">Diupload ${m.date} • ${m.size}</div></div>
       <div class="material-actions">
-        <button class="btn btn-primary btn-sm" onclick="downloadMaterial(${m.id})"><i class="fas fa-download"></i></button>
-        ${isAdmin ? `<button class="btn btn-danger btn-sm" onclick="confirmDeleteMaterial(${m.id})"><i class="fas fa-trash"></i></button>` : ''}
+        <button class="btn btn-primary btn-sm" onclick="downloadMaterial(${m.id})" title="Download"><i class="fas fa-download"></i></button>
+        ${isAdmin ? `<button class="btn btn-danger btn-sm" onclick="confirmDeleteMaterial(${m.id})" title="Hapus"><i class="fas fa-trash"></i></button>` : ''}
       </div>
     </div>
   `).join('');
@@ -719,11 +731,18 @@ function renderKas(){
       <div style="font-size:1.8rem;font-weight:bold;margin-bottom:5px">${ks.filter(k=>k.paid).length}/${ks.length} Mahasiswa</div>
       <div style="font-size:.9rem">sudah membayar kas bulan ini</div>
     </div>
-    ${ks.map(k => `<div class="kas-item"><div class="kas-name"><i class="fas fa-user"></i> ${escapeHtml(k.name)}</div><span class="kas-status ${k.paid?'paid':'unpaid'}" ${isAdmin?`onclick="toggleKas(${k.id})" style="cursor:pointer"`:''}>${k.paid?'✓ Sudah Bayar':'✗ Belum Bayar'}</span></div>`).join('')}
+    ${ks.map(k => `<div class="kas-item" data-id="${k.id}">
+      <div style="display:flex;gap:8px;align-items:center;flex:1"><div class="kas-name"><i class="fas fa-user"></i> ${escapeHtml(k.name)}</div></div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span class="kas-status ${k.paid?'paid':'unpaid'}" ${isAdmin?`onclick="toggleKas(${k.id})" style="cursor:pointer"`:''}>${k.paid?'✓ Sudah Bayar':'✗ Belum Bayar'}</span>
+        ${isAdmin ? `<button class="btn btn-danger btn-sm" onclick="confirmDeleteKas(${k.id})" title="Hapus nama"><i class="fas fa-trash"></i></button>` : ''}
+      </div>
+    </div>`).join('')}
   `;
   list.innerHTML = html;
 }
 
+/* ---------- STATS ---------- */
 function renderStats(){
   const mats = getMaterials();
   const tasks = getTasks();
@@ -759,12 +778,12 @@ function handleUpload(e){
     // Save file with base64 data
     mats.unshift({
       id:(mats.length?Math.max(...mats.map(m=>m.id)):0)+1, 
-      title, 
+      title: course + ' — ' + title, 
       type, 
       size, 
       date:'Baru saja', 
       filename:file.name,
-      fileData: event.target.result, // base64 data
+      fileData: event.target.result, // base64 data URL
       mimeType: file.type
     });
     saveMaterials(mats);
@@ -793,6 +812,19 @@ function handleAddTugas(e){
   form.reset();
 }
 
+function handleAddKas(e){
+  e.preventDefault();
+  const cur = getCurrent();
+  if(!cur || !(cur.role===ROLE_KETUA || cur.role===ROLE_BENDAHARA)){ alert('Akses ditolak'); return; }
+  const form = e.target;
+  const name = form.name.value.trim();
+  if(!name){ alert('Masukkan nama'); return; }
+  const ks = getKas();
+  ks.unshift({id:(ks.length?Math.max(...ks.map(k=>k.id)):0)+1, name, paid:false});
+  saveKas(ks);
+  closeModal('modalAddKas'); renderKas(); renderStats(); form.reset();
+}
+
 function toggleTask(taskId){
   const cur = getCurrent();
   if(!cur){ alert('Silakan login'); return; }
@@ -811,12 +843,24 @@ function toggleKas(id){
   if(idx>-1){ ks[idx].paid = !ks[idx].paid; saveKas(ks); renderKas(); renderStats(); }
 }
 
+/* ---------- DOWNLOAD MATERIAL (real) ---------- */
 function downloadMaterial(id){
   const m = getMaterials().find(x=>x.id===id);
   if(!m) return alert('File tidak ditemukan');
-  alert('Simulasi download: ' + m.title + (m.filename?(' (file: '+m.filename+')'):''));
+  if(!m.fileData){
+    // No file stored (default items) -> inform user
+    return alert('File asli tidak tersedia untuk materi ini. Hanya materi yang diupload bisa didownload.');
+  }
+  // m.fileData is data URL (base64). Create link and click
+  const a = document.createElement('a');
+  a.href = m.fileData;
+  a.download = m.filename || (`${m.title.replace(/[^a-z0-9\-\_]/ig,'_')}`);
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
+/* ---------- DELETE MATERIAL/TUGAS/KAS ---------- */
 function confirmDeleteMaterial(id){ if(confirm('Hapus materi ini?')) deleteMaterial(id); }
 function deleteMaterial(id){
   const cur = getCurrent(); if(!cur || !(cur.role===ROLE_KETUA||cur.role===ROLE_BENDAHARA)){ alert('Akses ditolak'); return; }
@@ -829,7 +873,13 @@ function deleteTask(id){
   const status = getTaskStatus(); for(const k of Object.keys(status)){ if(k.startsWith(id+'_')) delete status[k]; } saveTaskStatus(status);
   renderTasks(); renderStats();
 }
+function confirmDeleteKas(id){ if(confirm('Hapus nama kas ini?')) deleteKas(id); }
+function deleteKas(id){
+  const cur = getCurrent(); if(!cur || !(cur.role===ROLE_KETUA||cur.role===ROLE_BENDAHARA)){ alert('Akses ditolak'); return; }
+  const ks = getKas().filter(k=>k.id!==id); saveKas(ks); renderKas(); renderStats();
+}
 
+/* ---------- CHANGE PASSWORD ---------- */
 function handleChangePass(e){
   e.preventDefault();
   const cur = getCurrent(); if(!cur) return alert('Silakan login');
@@ -844,6 +894,7 @@ function handleChangePass(e){
   document.getElementById('oldPass').value=''; document.getElementById('newPass').value=''; document.getElementById('confPass').value='';
 }
 
+/* ---------- LOGOUT / EXPORT ---------- */
 function logout(){
   if(!confirm('Logout sekarang?')) return;
   clearCurrent();
@@ -857,6 +908,7 @@ function logout(){
   document.getElementById('btnTopUpload').style.display='none';
   document.getElementById('btnUploadPage').style.display='none';
   document.getElementById('btnAddTugas').style.display='none';
+  document.getElementById('btnAddKas').style.display='none';
   loginNIM.value=''; loginPass.value=''; loginError.style.display='none';
 }
 
@@ -869,6 +921,7 @@ function exportKas(){
   URL.revokeObjectURL(url);
 }
 
+/* ---------- UTIL ---------- */
 function formatDeadline(d){
   const now = new Date(); const diff = d - now; const days = Math.ceil(diff/(1000*60*60*24));
   if(days < 0) return 'Terlambat'; if(days===0) return 'Hari ini'; if(days===1) return 'Besok'; return `${days} hari lagi`;
